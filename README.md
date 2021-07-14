@@ -1,6 +1,6 @@
 # JMODT
 
-This is the official code release of IROS 2021
+This is the official code release of the IROS-2021
 paper [JMODT: Joint Multi-Object Detection and Tracking with Camera-LiDAR Fusion for Autonomous Driving]().
 
 ## Overview
@@ -16,8 +16,8 @@ The region proposal feature processing modules:
 ## Model Zoo
 
 The results are evaluated on the validation set of the
-KITTI [object tracking dataset](http://www.cvlibs.net/datasets/kitti/eval_tracking.php). The average precision (AP)
-scores are measured with 40 recall positions. The run time is only measured for the tracking part (after region proposal
+KITTI [object tracking dataset](http://www.cvlibs.net/datasets/kitti/eval_tracking.php). Only `Car` objects are used. The average precision (AP)
+scores are measured with 40 recall positions. The run time is only measured for the tracking part (after the region proposal
 feature processing).
 
 | Model                                                        | AP-Easy | AP-Moderate | AP-Hard | MOTA  | MOTP  | IDS  | FRAG | Runtime |
@@ -43,7 +43,7 @@ The code has been tested in the following environment:
 pip install -r requirements.txt
 ```
 
-3. Build and install the required CUDA modules via PyTorch and CUDA toolkit:
+3. Build and install the required CUDA modules via PyTorch and the CUDA toolkit:
 
 ```shell
 python setup.py develop
@@ -87,7 +87,7 @@ JMODT
 
 ### Training
 
-Finetune the additional link/start-end branches based on a pretrained model:
+Finetune the additional link/start-end branches based on a pretrained detection model:
 
 ```shell
 python tools/train.py --data_root ${DATA_ROOT} --ckpt ${PRETRAINED_MODEL} --finetune --batch_size ${BATCH_SIZE} --output_dir ${OUTPUT}
@@ -95,17 +95,17 @@ python tools/train.py --data_root ${DATA_ROOT} --ckpt ${PRETRAINED_MODEL} --fine
 
 - If you want to train with multiple GPUs, add the `--mgpus` option.
 
-- If you want to jointly train detection and correlation models, remove the `--finetune` option.
+- If you want to jointly train the detection and correlation models, remove the `--finetune` option.
 
 ### Testing
 
-Evaluate the tracking performance on validation set:
+Evaluate the tracking performance on the validation set:
 
 ```shell
 python tools/eval.py --data_root ${DATA_ROOT} --det_output ${DETECTION_OUTPUT} --ckpt ${CKPT}
 ```
 
-# Visualization
+## Visualization
 
 Please try the code under `tools/visualization` directory to visualize your 3D object tracking results and make an
 impressive video!
