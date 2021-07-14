@@ -1,0 +1,14 @@
+numpy
+easydict
+scipy
+pyyaml
+fire
+numba
+ortools
+filterpy
+munkres
+tqdm
+tensorboardX
+opencv-python
+pillow
+open3d

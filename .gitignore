@@ -1,0 +1,17 @@
+__pycache__
+*.so
+.idea
+build
+*.pyc
+*.pyd
+*.egg
+*.egg-info
+dist
+develop-eggs
+.installed.cfg
+.log
+
+data
+output
+*.pth
+*.avi
