@@ -63,24 +63,24 @@ your own data splits by modifying `jmodt/config.py` file.
 python tools/kitti_converter.py --data_root ${DATA_ROOT}
 ```
 
-The final dataset organization should be like this (you can have custom data root):
+The final dataset organization should be like this (you can have your custom data root):
 
 ```
 JMODT
 ├── data
-│   ├── KITTI
-│   │   ├── tracking
-│   │   │   ├──training
-│   │   │      ├──calib & velodyne & label_02 & image_02
-│   │   │   ├──testing
-│   │   │      ├──calib & velodyne & image_02
-│   │   ├── tracking_object
-│   │   │   ├──ImageSets
-│   │   │      ├──small_val.txt & test.txt & train.txt & val.txt
-│   │   │   ├──training
-│   │   │      ├──calib & velodyne & label_2 & image_2 & sample2frame.txt & seq2sample.txt
-│   │   │   ├──testing
-│   │   │      ├──calib & velodyne & image_2 & sample2frame.txt & seq2sample.txt
+    ├── KITTI
+        ├── tracking
+        │   ├──training
+        │   │  ├──calib & velodyne & label_02 & image_02
+        │   ├──testing
+        │      ├──calib & velodyne & image_02
+        ├── tracking_object
+            ├──ImageSets
+            │  ├──small_val.txt & test.txt & train.txt & val.txt
+            ├──training
+            │  ├──calib & velodyne & label_2 & image_2 & sample2frame.txt & seq2sample.txt
+            ├──testing
+               ├──calib & velodyne & image_2 & sample2frame.txt & seq2sample.txt
 ```
 
 ## Training & Testing
