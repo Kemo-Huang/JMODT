@@ -14,7 +14,7 @@ def model_joint_fn_decorator():
 
     def model_fn_train(model, data):
         if cfg.RPN.ENABLED:
-            pts_rect, pts_features, pts_input = data['pts_rect'], data['pts_features'], data['pts_input']
+            pts_input = data['pts_input']
             gt_boxes3d = data['gt_boxes3d']
 
             if not cfg.RPN.FIXED:
@@ -30,15 +30,12 @@ def model_joint_fn_decorator():
             for key, val in data.items():
                 if key != 'sample_id':
                     input_data[key] = torch.from_numpy(val).contiguous().cuda(non_blocking=True).float()
-            if not cfg.RCNN.ROI_SAMPLE_JIT:
-                pts_input = torch.cat((input_data['pts_input'], input_data['pts_features']), dim=-1)
-                input_data['pts_input'] = pts_input
 
         if cfg.LI_FUSION.ENABLED:
             img = torch.from_numpy(data['img']).cuda(non_blocking=True).float().permute((0, 3, 1, 2))
-            pts_origin_xy = torch.from_numpy(data['pts_origin_xy']).cuda(non_blocking=True).float()
+            pts_xy = torch.from_numpy(data['pts_xy']).cuda(non_blocking=True).float()
             input_data['img'] = img
-            input_data['pts_origin_xy'] = pts_origin_xy
+            input_data['pts_xy'] = pts_xy
         if cfg.RPN.USE_RGB or cfg.RCNN.USE_RGB:
             pts_rgb = data['rgb']
             pts_rgb = torch.from_numpy(pts_rgb).cuda(non_blocking=True).float()

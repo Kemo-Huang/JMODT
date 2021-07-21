@@ -16,9 +16,10 @@ The region proposal feature processing modules:
 ## Model Zoo
 
 The results are evaluated on the validation set of the
-KITTI [object tracking dataset](http://www.cvlibs.net/datasets/kitti/eval_tracking.php). Only `Car` objects are used. The average precision (AP)
-scores are measured with 40 recall positions. The run time is only measured for the tracking part (after the region proposal
-feature processing).
+KITTI [object tracking dataset](http://www.cvlibs.net/datasets/kitti/eval_tracking.php). Only `Car` objects are used.
+The average precision (AP)
+scores are measured with 40 recall positions. The run time is only measured for the tracking part (after the region
+proposal feature processing).
 
 | Model                                                        | AP-Easy | AP-Moderate | AP-Hard | MOTA  | MOTP  | IDS  | FRAG | Runtime |
 | ------------------------------------------------------------ | ------- | ----------- | ------- | ----- | ----- | ---- | ---- | ------- |

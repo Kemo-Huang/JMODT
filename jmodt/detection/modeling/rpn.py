@@ -6,7 +6,7 @@ import jmodt.ops.pointnet2.pytorch_utils as pt_utils
 import jmodt.utils.loss_utils as loss_utils
 from jmodt.config import cfg
 from jmodt.detection.layers.proposal_layer import ProposalLayer
-from jmodt.detection.modeling.backbone import Pointnet2MSG
+from jmodt.detection.modeling.backbone import PointNet2MSG
 
 
 class RPN(nn.Module):
@@ -14,7 +14,7 @@ class RPN(nn.Module):
         super().__init__()
 
         input_channels = int(cfg.RPN.USE_INTENSITY) + 3 * int(cfg.RPN.USE_RGB)
-        self.backbone_net = Pointnet2MSG(input_channels=input_channels, use_xyz=use_xyz)
+        self.backbone_net = PointNet2MSG(input_channels=input_channels, use_xyz=use_xyz)
 
         # classification branch
         cls_layers = []
@@ -73,7 +73,7 @@ class RPN(nn.Module):
         pts_input = input_data['pts_input']
         if cfg.LI_FUSION.ENABLED:
             img_input = input_data['img']
-            xy_input = input_data['pts_origin_xy']
+            xy_input = input_data['pts_xy']
             backbone_xyz, backbone_features = self.backbone_net(pts_input, img_input, xy_input)  # (B, N, 3), (B, C, N)
         else:
             backbone_xyz, backbone_features = self.backbone_net(pts_input)  # (B, N, 3), (B, C, N)

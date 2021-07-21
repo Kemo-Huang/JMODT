@@ -1,27 +1,24 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from torch.nn.functional import grid_sample
 
 from jmodt.config import cfg
 from jmodt.ops.pointnet2.pointnet2_modules import PointnetFPModule, PointnetSAModuleMSG
 
-BatchNorm2d = nn.BatchNorm2d
 
-
-def conv3x3(in_planes, out_planes, stride=1):
+def conv3x3(in_channels, out_channels, stride=1):
     """3x3 convolution with padding"""
-    return nn.Conv2d(in_planes, out_planes, kernel_size=3, stride=stride,
+    return nn.Conv2d(in_channels, out_channels, kernel_size=3, stride=stride,
                      padding=1, bias=False)
 
 
 class BasicBlock(nn.Module):
-    def __init__(self, inplanes, outplanes, stride=1):
+    def __init__(self, in_channels, out_channels, stride=1):
         super(BasicBlock, self).__init__()
-        self.conv1 = conv3x3(inplanes, outplanes, stride)
-        self.bn1 = BatchNorm2d(outplanes)
+        self.conv1 = conv3x3(in_channels, out_channels, stride)
+        self.bn1 = nn.BatchNorm2d(out_channels)
         self.relu = nn.ReLU(inplace=True)
-        self.conv2 = conv3x3(outplanes, outplanes, 2 * stride)
+        self.conv2 = conv3x3(out_channels, out_channels, 2 * stride)
 
     def forward(self, x):
         out = self.conv1(x)
@@ -33,23 +30,9 @@ class BasicBlock(nn.Module):
         return out
 
 
-class Fusion_Conv(nn.Module):
-    def __init__(self, inplanes, outplanes):
-        super(Fusion_Conv, self).__init__()
-
-        self.conv1 = torch.nn.Conv1d(inplanes, outplanes, 1)
-        self.bn1 = torch.nn.BatchNorm1d(outplanes)
-
-    def forward(self, point_features, img_features):
-        fusion_features = torch.cat([point_features, img_features], dim=1)
-        fusion_features = F.relu(self.bn1(self.conv1(fusion_features)))
-
-        return fusion_features
-
-
-class IA_Layer(nn.Module):
+class IALayer(nn.Module):
     def __init__(self, channels):
-        super(IA_Layer, self).__init__()
+        super(IALayer, self).__init__()
         self.ic, self.pc = channels
         rc = self.pc // 4
         self.conv1 = nn.Sequential(nn.Conv1d(self.ic, self.pc, 1),
@@ -75,14 +58,13 @@ class IA_Layer(nn.Module):
         return out
 
 
-class Atten_Fusion_Conv(nn.Module):
-    def __init__(self, inplanes_I, inplanes_P, outplanes):
-        super(Atten_Fusion_Conv, self).__init__()
+class AttentionFusion(nn.Module):
+    def __init__(self, img_in_channels, pc_in_channels, out_channels):
+        super(AttentionFusion, self).__init__()
 
-        self.IA_Layer = IA_Layer(channels=[inplanes_I, inplanes_P])
-        # self.conv1 = torch.nn.Conv1d(inplanes_P, outplanes, 1)
-        self.conv1 = torch.nn.Conv1d(inplanes_P + inplanes_P, outplanes, 1)
-        self.bn1 = torch.nn.BatchNorm1d(outplanes)
+        self.IA_Layer = IALayer(channels=[img_in_channels, pc_in_channels])
+        self.conv1 = torch.nn.Conv1d(pc_in_channels + pc_in_channels, out_channels, 1)
+        self.bn1 = torch.nn.BatchNorm1d(out_channels)
 
     def forward(self, point_features, img_features):
         img_features = self.IA_Layer(img_features, point_features)
@@ -102,15 +84,14 @@ def feature_gather(feature_map, xy):
     """
     xy = xy.unsqueeze(1)  # xy(B,N,2)->(B,1,N,2)
     # use grid_sample for this.
-    interpolate_feature = grid_sample(feature_map.float(), xy, align_corners=True)  # (B,C,1,N)
+    interpolate_feature = F.grid_sample(feature_map.float(), xy, align_corners=True)  # (B,C,1,N)
 
     return interpolate_feature.squeeze(2)  # (B,C,N)
 
 
-class Pointnet2MSG(nn.Module):
-    def __init__(self, input_channels=6, use_xyz=True, image_size_range=(1280.0, 384.0)):
+class PointNet2MSG(nn.Module):
+    def __init__(self, input_channels=6, use_xyz=True):
         super().__init__()
-        self.image_size_range = image_size_range
         self.SA_modules = nn.ModuleList()
         channel_in = input_channels
 
@@ -135,7 +116,6 @@ class Pointnet2MSG(nn.Module):
             skip_channel_list.append(channel_out)
             channel_in = channel_out
 
-        ##################
         if cfg.LI_FUSION.ENABLED:
             self.Img_Block = nn.ModuleList()
             self.Fusion_Conv = nn.ModuleList()
@@ -143,13 +123,8 @@ class Pointnet2MSG(nn.Module):
             for i in range(len(cfg.LI_FUSION.IMG_CHANNELS) - 1):
                 self.Img_Block.append(
                     BasicBlock(cfg.LI_FUSION.IMG_CHANNELS[i], cfg.LI_FUSION.IMG_CHANNELS[i + 1], stride=1))
-                if cfg.LI_FUSION.ADD_Image_Attention:
-                    self.Fusion_Conv.append(
-                        Atten_Fusion_Conv(cfg.LI_FUSION.IMG_CHANNELS[i + 1], cfg.LI_FUSION.POINT_CHANNELS[i],
-                                          cfg.LI_FUSION.POINT_CHANNELS[i]))
-                else:
-                    self.Fusion_Conv.append(
-                        Fusion_Conv(cfg.LI_FUSION.IMG_CHANNELS[i + 1] + cfg.LI_FUSION.POINT_CHANNELS[i],
+                self.Fusion_Conv.append(
+                    AttentionFusion(cfg.LI_FUSION.IMG_CHANNELS[i + 1], cfg.LI_FUSION.POINT_CHANNELS[i],
                                     cfg.LI_FUSION.POINT_CHANNELS[i]))
 
                 self.DeConv.append(nn.ConvTranspose2d(cfg.LI_FUSION.IMG_CHANNELS[i + 1], cfg.LI_FUSION.DeConv_Reduce[i],
@@ -159,15 +134,9 @@ class Pointnet2MSG(nn.Module):
             self.image_fusion_conv = nn.Conv2d(sum(cfg.LI_FUSION.DeConv_Reduce),
                                                cfg.LI_FUSION.IMG_FEATURES_CHANNEL // 4, kernel_size=1)
             self.image_fusion_bn = torch.nn.BatchNorm2d(cfg.LI_FUSION.IMG_FEATURES_CHANNEL // 4)
-
-            if cfg.LI_FUSION.ADD_Image_Attention:
-                self.final_fusion_img_point = Atten_Fusion_Conv(cfg.LI_FUSION.IMG_FEATURES_CHANNEL // 4,
-                                                                cfg.LI_FUSION.IMG_FEATURES_CHANNEL,
-                                                                cfg.LI_FUSION.IMG_FEATURES_CHANNEL)
-            else:
-                self.final_fusion_img_point = Fusion_Conv(
-                    cfg.LI_FUSION.IMG_FEATURES_CHANNEL + cfg.LI_FUSION.IMG_FEATURES_CHANNEL // 4,
-                    cfg.LI_FUSION.IMG_FEATURES_CHANNEL)
+            self.final_fusion_img_point = AttentionFusion(cfg.LI_FUSION.IMG_FEATURES_CHANNEL // 4,
+                                                          cfg.LI_FUSION.IMG_FEATURES_CHANNEL,
+                                                          cfg.LI_FUSION.IMG_FEATURES_CHANNEL)
 
         self.FP_modules = nn.ModuleList()
 
@@ -187,17 +156,12 @@ class Pointnet2MSG(nn.Module):
 
         return xyz, features
 
-    def forward(self, pointcloud, image=None, xy=None):
-        xyz, features = self._break_up_pc(pointcloud)
+    def forward(self, pc, image=None, xy=None):
+        xyz, features = self._break_up_pc(pc)
 
         l_xyz, l_features = [xyz], [features]
-
-        if cfg.LI_FUSION.ENABLED:
-            # normalize xy to [-1,1]
-            xy[:, :, 0] = xy[:, :, 0] / (self.image_size_range[0] - 1.0) * 2.0 - 1.0
-            xy[:, :, 1] = xy[:, :, 1] / (self.image_size_range[1] - 1.0) * 2.0 - 1.0
-            l_xy_cor = [xy]
-            img = [image]
+        l_xy_cor = [xy]
+        img = [image]
 
         for i in range(len(self.SA_modules)):
             li_xyz, li_features, li_index = self.SA_modules[i](l_xyz[i], l_features[i])
@@ -222,10 +186,10 @@ class Pointnet2MSG(nn.Module):
 
         if cfg.LI_FUSION.ENABLED:
             # for i in range(1,len(img))
-            DeConv = []
+            de_conv = []
             for i in range(len(cfg.LI_FUSION.IMG_CHANNELS) - 1):
-                DeConv.append(self.DeConv[i](img[i + 1]))
-            de_concat = torch.cat(DeConv, dim=1)
+                de_conv.append(self.DeConv[i](img[i + 1]))
+            de_concat = torch.cat(de_conv, dim=1)
 
             img_fusion = F.relu(self.image_fusion_bn(self.image_fusion_conv(de_concat)))
             img_fusion_gather_feature = feature_gather(img_fusion, xy)

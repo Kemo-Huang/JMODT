@@ -10,10 +10,11 @@ from jmodt.utils import calibration, kitti_utils
 
 class KittiDataset(Dataset):
     def __init__(self, root_dir, npoints=16384, split='train', classes='Car', mode='TRAIN', logger=None,
-                 challenge='detection'):
+                 challenge='detection', fixed_img_size=(384, 1280)):
         self.split = split
         is_test = self.split == 'test'
         self.challenge = challenge
+        self.fixed_img_size = fixed_img_size
         assert mode in ['TRAIN', 'EVAL', 'TEST'], 'Invalid mode: %s' % mode
         self.mode = mode
         if challenge == 'detection':
@@ -90,30 +91,27 @@ class KittiDataset(Dataset):
             else:
                 self.sample_pair_id_list = [(int(x1), int(x2)) for x1, x2 in self.sample_pair_list]
 
-    def get_image_rgb_with_normal(self, idx):
+    def get_normalized_image(self, idx):
         """
-        return img with normalization in rgb mode
-        :param idx:
-        :return: imback(H,W,3)
+        :return: fixed_size_img (H,W,3)
         """
         img_file = os.path.join(self.image_dir, '%06d.png' % idx)
         assert os.path.exists(img_file)
-        im = Image.open(img_file).convert('RGB')
-        im = np.array(im).astype(np.float)
-        im /= 255.0
-        im -= self.mean
-        im /= self.std
-        # make same size padding with 0
-        imback = np.zeros([384, 1280, 3], dtype=np.float)
-        imback[:im.shape[0], :im.shape[1], :] = im
+        img = Image.open(img_file).convert('RGB')
+        img = np.array(img).astype(np.float32)
+        img /= 255.0
+        img -= self.mean
+        img /= self.std
+        fixed_size_img = np.zeros([self.fixed_img_size[0], self.fixed_img_size[1], 3], dtype=np.float32)
+        fixed_size_img[:img.shape[0], :img.shape[1], :] = img
 
-        return imback  # (H,W,3) RGB mode
+        return fixed_size_img
 
     def get_image_shape(self, idx):
         img_file = os.path.join(self.image_dir, '%06d.png' % idx)
         assert os.path.exists(img_file), f'Path {img_file} does not exist'
-        im = Image.open(img_file)
-        width, height = im.size
+        img = Image.open(img_file)
+        width, height = img.size
         return height, width, 3
 
     def get_lidar(self, idx):
@@ -207,8 +205,17 @@ class KittiDataset(Dataset):
             return self.get_sample_dict(prev_sample_id), self.get_sample_dict(next_sample_id)
 
     def get_sample_dict(self, sample_id):
+        """
+        :return:
+            sample_id
+            img
+            pts_xy
+            pts_input
+            gt_boxes3d
+            gt_tid
+        """
         calib = self.get_calib(sample_id)
-        img = self.get_image_rgb_with_normal(sample_id)
+        img = self.get_normalized_image(sample_id)
         img_shape = self.get_image_shape(sample_id)
         pts_lidar = self.get_lidar(sample_id)
 
@@ -218,18 +225,19 @@ class KittiDataset(Dataset):
         pts_valid_flag = self.get_valid_flag(pts_rect, pts_img, pts_rect_depth, img_shape)
         pts_rect = pts_rect[pts_valid_flag]
         pts_intensity = pts_lidar[pts_valid_flag, 3]
-        pts_origin_xy = pts_img[pts_valid_flag]
+        pts_xy = pts_img[pts_valid_flag]
 
         # generate inputs
         if self.npoints < len(pts_rect):
+            # keep far points, sample near points
             pts_depth = pts_rect[:, 2]
             pts_near_flag = pts_depth < 40.0
-            far_idxs_choice = np.where(pts_near_flag == 0)[0]
-            near_idxs = np.where(pts_near_flag == 1)[0]
-            near_idxs_choice = np.random.choice(near_idxs, self.npoints - len(far_idxs_choice), replace=False)
+            far_indices_choice = np.where(pts_near_flag == 0)[0]
+            near_indices = np.where(pts_near_flag == 1)[0]
+            near_indices_choice = np.random.choice(near_indices, self.npoints - len(far_indices_choice), replace=False)
 
-            choice = np.concatenate((near_idxs_choice, far_idxs_choice), axis=0) \
-                if len(far_idxs_choice) > 0 else near_idxs_choice
+            choice = np.concatenate((near_indices_choice, far_indices_choice), axis=0) \
+                if len(far_indices_choice) > 0 else near_indices_choice
             np.random.shuffle(choice)
         else:
             choice = np.arange(0, len(pts_rect), dtype=np.int32)
@@ -240,58 +248,56 @@ class KittiDataset(Dataset):
 
         ret_pts_rect = pts_rect[choice, :]
         ret_pts_intensity = pts_intensity[choice] - 0.5  # translate intensity to [-0.5, 0.5]
-        ret_pts_origin_xy = pts_origin_xy[choice, :]
+        ret_pts_xy = pts_xy[choice, :]
+
+        # normalize xy to [-1,1]
+        ret_pts_xy[:, 0] = ret_pts_xy[:, 0] / (self.fixed_img_size[1] - 1.0) * 2.0 - 1.0
+        ret_pts_xy[:, 1] = ret_pts_xy[:, 1] / (self.fixed_img_size[0] - 1.0) * 2.0 - 1.0
 
         pts_features = [ret_pts_intensity.reshape(-1, 1)]
         ret_pts_features = np.concatenate(pts_features, axis=1) if pts_features.__len__() > 1 else pts_features[0]
 
-        sample_info = {'sample_id': sample_id, 'img': img, 'pts_origin_xy': ret_pts_origin_xy}
+        sample_info = {'sample_id': sample_id, 'img': img, 'pts_xy': ret_pts_xy}
 
-        if self.mode == 'TEST':
+        if self.mode == 'TEST':  # no label
             if cfg.RPN.USE_INTENSITY:
                 pts_input = np.concatenate((ret_pts_rect, ret_pts_features), axis=1)  # (N, C)
             else:
                 pts_input = ret_pts_rect
             sample_info['pts_input'] = pts_input
-            sample_info['pts_rect'] = ret_pts_rect
-            sample_info['pts_features'] = ret_pts_features
-
-            return sample_info
-
-        gt_obj_list = self.filtrate_objects(self.get_label(sample_id))
-
-        gt_boxes3d = np.zeros((gt_obj_list.__len__(), 7), dtype=np.float32)
-        gt_alpha = np.zeros((gt_obj_list.__len__()), dtype=np.float32)
-        gt_tids = np.zeros((gt_obj_list.__len__()), dtype=np.float32)
-
-        for k, obj in enumerate(gt_obj_list):
-            gt_boxes3d[k, 0:3], gt_boxes3d[k, 3], gt_boxes3d[k, 4], gt_boxes3d[k, 5], gt_boxes3d[k, 6] \
-                = obj.pos, obj.h, obj.w, obj.l, obj.ry
-            gt_alpha[k] = obj.alpha
-            gt_tids[k] = obj.score
-
-        # data augmentation
-        aug_pts_rect = ret_pts_rect.copy()
-        aug_gt_boxes3d = gt_boxes3d.copy()
-        if cfg.AUG_DATA and self.mode == 'TRAIN':
-            aug_pts_rect, aug_gt_boxes3d = self.data_augmentation(aug_pts_rect, aug_gt_boxes3d, gt_alpha)
-
-        # prepare input
-        if cfg.RPN.USE_INTENSITY:
-            pts_input = np.concatenate((aug_pts_rect, ret_pts_features), axis=1)  # (N, C)
         else:
-            pts_input = aug_pts_rect
+            gt_obj_list = self.filtrate_objects(self.get_label(sample_id))
 
-        sample_info['pts_input'] = pts_input
-        sample_info['pts_rect'] = aug_pts_rect
-        sample_info['pts_features'] = ret_pts_features
-        sample_info['gt_boxes3d'] = aug_gt_boxes3d
-        sample_info['gt_tids'] = gt_tids
-        if not cfg.RPN.FIXED:
-            # generate training labels
-            rpn_cls_label, rpn_reg_label = self.generate_rpn_training_labels(aug_pts_rect, aug_gt_boxes3d)
-            sample_info['rpn_cls_label'] = rpn_cls_label
-            sample_info['rpn_reg_label'] = rpn_reg_label
+            gt_boxes3d = np.zeros((gt_obj_list.__len__(), 7), dtype=np.float32)
+            gt_alpha = np.zeros((gt_obj_list.__len__()), dtype=np.float32)
+            gt_tids = np.zeros((gt_obj_list.__len__()), dtype=np.float32)
+
+            for k, obj in enumerate(gt_obj_list):
+                gt_boxes3d[k, 0:3], gt_boxes3d[k, 3], gt_boxes3d[k, 4], gt_boxes3d[k, 5], gt_boxes3d[k, 6] \
+                    = obj.pos, obj.h, obj.w, obj.l, obj.ry
+                gt_alpha[k] = obj.alpha
+                gt_tids[k] = obj.score
+
+            # data augmentation
+            aug_pts_rect = ret_pts_rect.copy()
+            aug_gt_boxes3d = gt_boxes3d.copy()
+            if cfg.AUG_DATA and self.mode == 'TRAIN':
+                aug_pts_rect, aug_gt_boxes3d = self.data_augmentation(aug_pts_rect, aug_gt_boxes3d, gt_alpha)
+
+            # prepare input
+            if cfg.RPN.USE_INTENSITY:
+                pts_input = np.concatenate((aug_pts_rect, ret_pts_features), axis=1)  # (N, C)
+            else:
+                pts_input = aug_pts_rect
+
+            sample_info['pts_input'] = pts_input
+            sample_info['gt_boxes3d'] = aug_gt_boxes3d
+            sample_info['gt_tids'] = gt_tids
+            if not cfg.RPN.FIXED:
+                # generate training labels
+                rpn_cls_label, rpn_reg_label = self.generate_rpn_training_labels(aug_pts_rect, aug_gt_boxes3d)
+                sample_info['rpn_cls_label'] = rpn_cls_label
+                sample_info['rpn_reg_label'] = rpn_reg_label
 
         return sample_info
 

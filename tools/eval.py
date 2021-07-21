@@ -24,8 +24,9 @@ from jmodt.utils.object3d import Object3d
 parser = argparse.ArgumentParser(description="arg parser")
 parser.add_argument('--data_root', type=str, default='data/KITTI', help='the ground truth data root')
 parser.add_argument('--det_output', type=str, default='output/det', help='the detection output directory')
-parser.add_argument('--ckpt', type=str, default='output/ckpt/jmodt.pth', help='the pretrained model path')
-parser.add_argument('--tracking_tag', type=str, default='mot_data', help='the tag for tracking results')
+parser.add_argument('--output_dir', type=str, default='output', help='the tracking output directory')
+parser.add_argument('--ckpt', type=str, default='checkpoints/jmodt.pth', help='the pretrained model path')
+parser.add_argument('--tag', type=str, default='mot_data', help='the tag for tracking results')
 parser.add_argument('--hungarian', action='store_true', help='whether to use hungarian algorithm')
 parser.add_argument('--only_tracking', action='store_true', help='whether to evaluate tracking without detection')
 parser.add_argument('--test', action='store_true', help='whether to use the test split data')
@@ -35,34 +36,14 @@ args = parser.parse_args()
 np.random.seed(2333)
 
 
-def create_logger(filename):
-    logger = logging.getLogger(__name__)
-    logger.setLevel(level=logging.INFO)
-    formatter = logging.Formatter('%(message)s')
-
-    ch = logging.StreamHandler()
-    ch.setFormatter(formatter)
-    ch.setLevel(level=logging.INFO)
-    logger.addHandler(ch)
-
-    fh = logging.FileHandler(filename)
-    fh.setFormatter(formatter)
-    fh.setLevel(level=logging.INFO)
-    logger.addHandler(fh)
-
-    return logger
-
-
 @torch.no_grad()
-def eval_joint_detection():
+def eval_joint_detection(logger):
     det_output = args.det_output
     # set epoch_id and output dir
     num_list = re.findall(r'\d+', args.ckpt) if args.ckpt is not None else []
     epoch_id = num_list[-1] if num_list.__len__() > 0 else 'no_number'
     os.makedirs(det_output, exist_ok=True)
 
-    log_file = os.path.join(det_output, 'logger.txt')
-    logger = create_logger(log_file)
     logger.info('**********************Start evaluate detection**********************')
 
     # create dataloader & network
@@ -103,10 +84,10 @@ def eval_joint_detection():
         input_data = {'pts_input': inputs}
         # img feature
         if cfg.LI_FUSION.ENABLED:
-            pts_origin_xy, img = data['pts_origin_xy'], data['img']
-            pts_origin_xy = torch.from_numpy(pts_origin_xy).cuda(non_blocking=True).float()
+            pts_xy, img = data['pts_xy'], data['img']
+            pts_xy = torch.from_numpy(pts_xy).cuda(non_blocking=True).float()
             img = torch.from_numpy(img).cuda(non_blocking=True).float().permute((0, 3, 1, 2))
-            input_data['pts_origin_xy'] = pts_origin_xy
+            input_data['pts_xy'] = pts_xy
             input_data['img'] = img
 
         # model inference
@@ -311,11 +292,9 @@ def convert_det_sample_to_seq_frame(seq2sample_path, sample2frame_path):
     return seq2sample_dict, sample2frame_dict
 
 
-def eval_tracking():
-    tracking_output_root = "output"
-    result_sha = args.tracking_tag
+def eval_tracking(logger):
     part = 'test' if args.test else 'val'
-    tracking_res_dir = os.path.join(tracking_output_root, result_sha, part)
+    tracking_res_dir = os.path.join(args.output_dir, args.tag, part)
     if not os.path.exists(tracking_res_dir):
         os.makedirs(tracking_res_dir)
     det_res_dir = args.det_output
@@ -330,8 +309,6 @@ def eval_tracking():
     w_se = 1
     cls_threshold = 0.85
 
-    log_file = os.path.join(tracking_output_root, result_sha, f'{datetime.now().strftime("%Y-%m-%d-%S-%M-%H")}.log')
-    logger = create_logger(log_file)
     logger.info("**********************Start evaluate tracking**********************")
     logger.info(f't_miss={t_miss}, t_hit={t_hit}, '
                 f'w_cls={w_cls}, w_app={w_app}, w_iou={w_iou}, w_dis={w_dis}, w_se={w_se}')
@@ -413,7 +390,7 @@ def eval_tracking():
     if not args.test:
         gt_path = os.path.join(args.data_root, 'tracking', 'training')
         evaluate_tracking(
-            result_sha=result_sha, result_root=tracking_output_root, part=part, gt_path=gt_path, logger=logger)
+            result_sha=args.tag, result_root=args.output_dir, part=part, gt_path=gt_path, logger=logger)
 
 
 def save_kitti_tracking_format(results, frame_id, out_file):
@@ -428,7 +405,37 @@ def save_kitti_tracking_format(results, frame_id, out_file):
         )
 
 
-if __name__ == '__main__':
+def main():
+    logger = logging.getLogger(__name__)
+    logger.setLevel(level=logging.INFO)
+    formatter = logging.Formatter('%(message)s')
+
+    ch = logging.StreamHandler()
+    ch.setFormatter(formatter)
+    ch.setLevel(level=logging.INFO)
+    logger.addHandler(ch)
+
     if not args.only_tracking:
-        eval_joint_detection()
-    eval_tracking()
+        det_log_path = os.path.join(args.det_output, f'{datetime.now().strftime("%Y-%m-%d-%S-%M-%H")}.log')
+        det_fh = logging.FileHandler(det_log_path)
+        det_fh.setFormatter(formatter)
+        det_fh.setLevel(level=logging.INFO)
+        logger.addHandler(det_fh)
+
+        # start eval detection
+        eval_joint_detection(logger)
+
+        logger.removeHandler(det_fh)
+
+    trk_log_path = os.path.join(args.output_dir, args.tag, f'{datetime.now().strftime("%Y-%m-%d-%S-%M-%H")}.log')
+    trk_fh = logging.FileHandler(trk_log_path)
+    trk_fh.setFormatter(formatter)
+    trk_fh.setLevel(level=logging.INFO)
+    logger.addHandler(trk_fh)
+
+    # start eval tracking
+    eval_tracking(logger)
+
+
+if __name__ == '__main__':
+    main()

@@ -102,8 +102,8 @@ class KittiSequenceViewer:
         pts_valid_flag = KittiDataset.get_valid_flag(pts_rect, pts_img, pts_rect_depth, img.shape)
 
         pts_rect = pts_rect[pts_valid_flag][:, 0:3]
-        pts_origin_xy = pts_img[pts_valid_flag]  # (N, W, H)
-        colors = np.array([img[round(h) - 1, round(w) - 1] for w, h in pts_origin_xy])
+        pts_xy = pts_img[pts_valid_flag]  # (N, W, H)
+        colors = np.array([img[round(h) - 1, round(w) - 1] for w, h in pts_xy])
         pc = open3d.geometry.PointCloud()
         pc.points = open3d.utility.Vector3dVector(pts_rect)
         pc.colors = open3d.utility.Vector3dVector(colors)
