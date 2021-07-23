@@ -42,7 +42,6 @@ def eval_joint_detection(logger):
     # set epoch_id and output dir
     num_list = re.findall(r'\d+', args.ckpt) if args.ckpt is not None else []
     epoch_id = num_list[-1] if num_list.__len__() > 0 else 'no_number'
-    os.makedirs(det_output, exist_ok=True)
 
     logger.info('**********************Start evaluate detection**********************')
 
@@ -295,8 +294,7 @@ def convert_det_sample_to_seq_frame(seq2sample_path, sample2frame_path):
 def eval_tracking(logger):
     part = 'test' if args.test else 'val'
     tracking_res_dir = os.path.join(args.output_dir, args.tag, part)
-    if not os.path.exists(tracking_res_dir):
-        os.makedirs(tracking_res_dir)
+    os.makedirs(tracking_res_dir, exist_ok=True)
     det_res_dir = args.det_output
 
     # MOT hyper-parameters
@@ -416,6 +414,7 @@ def main():
     logger.addHandler(ch)
 
     if not args.only_tracking:
+        os.makedirs(args.det_output, exist_ok=True)
         det_log_path = os.path.join(args.det_output, f'{datetime.now().strftime("%Y-%m-%d-%S-%M-%H")}.log')
         det_fh = logging.FileHandler(det_log_path)
         det_fh.setFormatter(formatter)
@@ -427,6 +426,7 @@ def main():
 
         logger.removeHandler(det_fh)
 
+    os.makedirs(os.path.join(args.output_dir, args.tag), exist_ok=True)
     trk_log_path = os.path.join(args.output_dir, args.tag, f'{datetime.now().strftime("%Y-%m-%d-%S-%M-%H")}.log')
     trk_fh = logging.FileHandler(trk_log_path)
     trk_fh.setFormatter(formatter)

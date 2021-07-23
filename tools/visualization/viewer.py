@@ -165,12 +165,12 @@ class KittiSequenceViewer:
     def visualize(self, frames=None, show_labels=True, screenshot=True):
         frames = self.frames if frames is None else [str(int(frame)).zfill(6) for frame in frames]
         viewpoint_param = open3d.io.read_pinhole_camera_parameters(self.viewpoint_file)
+        self._vis.get_view_control().convert_from_pinhole_camera_parameters(viewpoint_param)
         for frame in frames:
             pc = self.get_painted_point_cloud(frame)
             self._vis.add_geometry(pc)
             if show_labels:
                 self.create_boxes_and_trajectories(frame)
-            self._vis.get_view_control().convert_from_pinhole_camera_parameters(viewpoint_param)
             self._vis.poll_events()
             self._vis.update_renderer()
             if screenshot:
