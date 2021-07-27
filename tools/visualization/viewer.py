@@ -165,6 +165,8 @@ class KittiSequenceViewer:
     def visualize(self, frames=None, show_labels=True, screenshot=True):
         frames = self.frames if frames is None else [str(int(frame)).zfill(6) for frame in frames]
         viewpoint_param = open3d.io.read_pinhole_camera_parameters(self.viewpoint_file)
+        self._vis.poll_events()
+        self._vis.update_renderer()
         for frame in frames:
             pc = self.get_painted_point_cloud(frame)
             self._vis.add_geometry(pc)
@@ -179,9 +181,9 @@ class KittiSequenceViewer:
         self._vis.destroy_window()
 
 
-def create_video(img_dir, video_name, size):
+def create_video(img_dir, video_name, size, fps=10):
     fourcc = cv2.VideoWriter_fourcc(*'DIVX')
-    video_writer = cv2.VideoWriter(video_name, fourcc, 10, size)
+    video_writer = cv2.VideoWriter(video_name, fourcc, fps, size)
     images = os.listdir(img_dir)
     images.sort()
     for filename in tqdm.tqdm(images):
