@@ -69,7 +69,7 @@ def get_pc_in_range(pc, xy_dist=70, z_range=(-3, 1)):
     return pc
 
 
-def visualize(root_dir, viewpoint_file, output_dir, label_dir, save_screenshot=False):
+def visualize(root_dir, viewpoint_file, output_dir, label_dir, save_screenshot=False, trajectory_length=20):
     frames = sorted([f[:-4] for f in os.listdir(os.path.join(root_dir, 'lidar_bin'))])
 
     vis = open3d.visualization.Visualizer()
@@ -156,7 +156,6 @@ def visualize(root_dir, viewpoint_file, output_dir, label_dir, save_screenshot=F
                          [1, 4], [6, 7]  # front
                          ]
             label_path = os.path.join(label_dir, f'{frame}.json')
-
             if not os.path.exists(label_path):
                 data = []
             else:
@@ -165,6 +164,8 @@ def visualize(root_dir, viewpoint_file, output_dir, label_dir, save_screenshot=F
                         data = json.load(f)
                     except json.decoder.JSONDecodeError:
                         data = []
+
+            track_dict = {}  # id, center
             for label in data:
                 psr = label['psr']
                 center = np.array(
@@ -176,10 +177,44 @@ def visualize(root_dir, viewpoint_file, output_dir, label_dir, save_screenshot=F
                 extent = np.array([float(psr['scale']['x']), float(psr['scale']['y']), float(psr['scale']['z'])])
                 box = open3d.geometry.OrientedBoundingBox(center, R, extent)
                 points = box.get_box_points()
-                color = color_map(color_indices[int(label['obj_id'])])[:3]
+                tracking_id = int(label['obj_id'])
+                track_dict[tracking_id] = [center]
+                color = color_map(color_indices[tracking_id])[:3]
                 line_mesh1 = LineMesh(points, box_lines, color, 0.1)
                 box = line_mesh1.cylinder_segments
                 for line in box:
+                    vis.add_geometry(line)
+
+            # get box centers from previous frames
+            min_frame = max(0, int(10 * float(frame)) - trajectory_length)
+            for cur_frame in range(int(10 * float(frame)) - 1, min_frame - 1, -1):
+                cur_frame = "{:.1f}".format(cur_frame / 10)
+                label_path = os.path.join(label_dir, f'{cur_frame}.json')
+                if not os.path.exists(label_path):
+                    data = []
+                else:
+                    with open(label_path, 'r') as f:
+                        try:
+                            data = json.load(f)
+                        except json.decoder.JSONDecodeError:
+                            data = []
+                for label in data:
+                    tracking_id = int(label['obj_id'])
+                    if tracking_id in track_dict:
+                        psr = label['psr']
+                        center = np.array(
+                            [float(psr['position']['x']), float(psr['position']['y']), float(psr['position']['z'])])
+                        track_dict[tracking_id].append(center)
+
+            for tracking_id, centers in track_dict.items():
+                if len(centers) < 2:
+                    continue
+                centers = np.vstack(centers)
+                lines = [[q, q + 1] for q in range(len(centers) - 1)]
+                color = color_map(color_indices[tracking_id])[:3]
+                line_mesh1 = LineMesh(centers, lines, color, 0.1)
+                trajectory = line_mesh1.cylinder_segments
+                for line in trajectory:
                     vis.add_geometry(line)
 
             vis.get_view_control().convert_from_pinhole_camera_parameters(viewpoint_param)
