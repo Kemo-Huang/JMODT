@@ -12,3 +12,4 @@ tensorboardX
 opencv-python
 pillow
 open3d
+matplotlib

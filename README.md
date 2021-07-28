@@ -7,11 +7,11 @@ paper [JMODT: Joint Multi-Object Detection and Tracking with Camera-LiDAR Fusion
 
 The system architecture of JMODT:
 
-![image](doc/system.png)
+![system](doc/system.png)
 
 The region proposal feature processing modules:
 
-<img src="doc/proposal.png" alt="drawing" width="400"/>
+<img src="doc/proposal.png" alt="method" width="400"/>
 
 ## Model Zoo
 
@@ -29,7 +29,7 @@ proposal feature processing).
 
 The code has been tested in the following environment:
 
-- Ubuntu 20.04 & Windows 10
+- Both Ubuntu 20.04 and Windows 10
 - Python 3.8
 - PyTorch 1.9.0
 - CUDA Toolkit 11.1
@@ -44,7 +44,9 @@ The code has been tested in the following environment:
 pip install -r requirements.txt
 ```
 
-3. Build and install the required CUDA modules via PyTorch and the CUDA toolkit:
+3. If you are using Windows, install microsoft build tools or Visual Studio for C++.
+
+4. Build and install the required CUDA modules via PyTorch C++ extension and the CUDA toolkit:
 
 ```shell
 python setup.py develop
@@ -83,6 +85,8 @@ JMODT
             ├──testing
                ├──calib & velodyne & image_2 & sample2frame.txt & seq2sample.txt
 ```
+
+SUSTech dataset will be released soon! The dataset includes sensor data for six cameras and a 128-channel LiDAR.
 
 ## Training & Testing
 
