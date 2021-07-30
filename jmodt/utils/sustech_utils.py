@@ -1,8 +1,4 @@
-import os
-from multiprocessing.pool import Pool
-
 import numpy as np
-import tqdm
 from numba import njit
 
 from jmodt.utils.pcd_utils import PointCloud
@@ -90,23 +86,3 @@ def pcd_to_bin(in_path, out_path):
     pc = PointCloud(in_path)
     pts = pc.data
     pts.tofile(out_path)
-
-
-def main():
-    data_root = '/media/kemo/Kemo/sustech-data/2021-06-25-06-56-55/dataset_10hz'
-    os.makedirs(os.path.join(data_root, 'lidar_bin'), exist_ok=True)
-
-    arguments = []
-    for sustech_lidar in os.listdir(os.path.join(data_root, 'lidar')):
-        frame = sustech_lidar[:-4]
-        in_path = os.path.join(data_root, 'lidar', sustech_lidar)
-        out_path = os.path.join(data_root, 'lidar_bin', f'{frame}.bin')
-        arguments.append((in_path, out_path))
-
-    with Pool(8) as pool:
-        for _ in tqdm.tqdm(pool.starmap(pcd_to_bin, arguments), total=len(arguments)):
-            pass
-
-
-if __name__ == '__main__':
-    main()

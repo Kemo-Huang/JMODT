@@ -1,3 +1,4 @@
+import argparse
 import json
 import os
 
@@ -7,8 +8,23 @@ from PIL import Image
 from matplotlib import cm
 
 from jmodt.utils.sustech_utils import proj_lidar_to_img
-from tools.visualization.line_mesh import LineMesh
 from tools.visualization.kitti_viewer import create_video
+from tools.visualization.line_mesh import LineMesh
+
+parser = argparse.ArgumentParser(description="arg parser")
+parser.add_argument('--data_root', type=str, default='E://sustech-data/2021-07-07/dataset_2hz',
+                    help='the ground truth data root')
+parser.add_argument('--output_dir', type=str, default='E://sustech-data/2021-07-07/dataset_2hz/output/all',
+                    help='the screenshot output directory')
+parser.add_argument('--label_dir', type=str, default='D://Github/JMODT/output/trk/2021-07-07/all/',
+                    help='the label directory')
+parser.add_argument('--viewpoint', type=str, default='viewpoint_all.json',
+                    help='the viewpoint json file')
+parser.add_argument('--video_name', type=str, default='2021-07-07.avi',
+                    help='the video name')
+parser.add_argument('--fps', type=int, default=2,
+                    help='the video frame rate')
+args = parser.parse_args()
 
 
 def get_lidar(file_path):
@@ -228,13 +244,13 @@ def visualize(root_dir, viewpoint_file, output_dir, label_dir, save_screenshot=F
 
 
 if __name__ == '__main__':
-    visualize(root_dir='E://sustech-data/2021-06-25-06-56-55/dataset_10hz/',
-              viewpoint_file='viewpoint_all.json',
-              output_dir=f'E://sustech-data/2021-06-25-06-56-55/dataset_10hz/output/all',
-              label_dir='D://Github/JMODT/output/trk/2021-06-25/all/',
-              # label_dir = '/media/kemo/Kemo/sustech-data/2021-06-25-06-56-55/dataset/label'
+    np.random.seed(2333)
+    visualize(root_dir=args.data_root,
+              viewpoint_file=args.viewpoint,
+              output_dir=args.output_dir,
+              label_dir=args.label_dir,
               save_screenshot=True)
-    create_video(f'E://sustech-data/2021-06-25-06-56-55/dataset_10hz/output/all',
-                 '2021-06-25_10hz.avi',
+    create_video(args.output_dir,
+                 args.video_name,
                  (1920, 1080),
-                 10)
+                 args.fps)
