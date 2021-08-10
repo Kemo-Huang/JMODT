@@ -58,7 +58,8 @@ def get_label_annos(label_folder, image_ids=None):
     annos = []
     label_folder = pathlib.Path(label_folder)
     for image_idx in image_ids:
-        label_filename = label_folder / ('%06d.txt' % int(image_idx))
+        # label_filename = label_folder / ('%06d.txt' % int(image_idx))
+        label_filename = label_folder / f'{image_idx}.txt'
         annos.append(get_label_anno(label_filename))
     return annos
 
@@ -83,7 +84,7 @@ def evaluate(label_path,
              current_class=0,
              coco=False,
              score_thresh=-1):
-    dt_annos = get_label_annos(result_path)
+    dt_annos = get_label_annos(result_path, image_idx_list)
     if score_thresh > 0:
         dt_annos = filter_annos_low_score(dt_annos, score_thresh)
     gt_annos = get_label_annos(label_path, image_idx_list)

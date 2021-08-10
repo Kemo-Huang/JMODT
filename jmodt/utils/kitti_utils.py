@@ -179,10 +179,11 @@ def in_hull(p, hull):
     return flag
 
 
-def get_iou3d(corners3d, query_corners3d, need_bev=False):
+def compute_iou(corners3d, query_corners3d, need_iou3d=False):
     """	
-    :param corners3d: (N, 8, 3) in rect coords	
-    :param query_corners3d: (M, 8, 3)	
+    :param corners3d: (N, 8, 3) in rect coords
+    :param query_corners3d: (M, 8, 3)
+    :param need_iou3d:
     :return:	
     """
     from shapely.geometry import Polygon
@@ -211,12 +212,15 @@ def get_iou3d(corners3d, query_corners3d, need_bev=False):
                 bottom_overlap = bottom_a.intersection(bottom_b).area
             else:
                 bottom_overlap = 0.
-            overlap3d = bottom_overlap * h_overlap
-            union3d = bottom_a.area * (max_h_a[i] - min_h_a[i]) + bottom_b.area * (max_h_b[j] - min_h_b[j]) - overlap3d
-            iou3d[i][j] = overlap3d / union3d
             iou_bev[i][j] = bottom_overlap / (bottom_a.area + bottom_b.area - bottom_overlap)
 
-    if need_bev:
-        return iou3d, iou_bev
+            if need_iou3d:
+                overlap3d = bottom_overlap * h_overlap
+                union3d = bottom_a.area * (max_h_a[i] - min_h_a[i]) + bottom_b.area * (
+                            max_h_b[j] - min_h_b[j]) - overlap3d
+                iou3d[i][j] = overlap3d / union3d
 
-    return iou3d
+    if need_iou3d:
+        return iou_bev, iou3d
+
+    return iou_bev

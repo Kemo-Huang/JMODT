@@ -4,7 +4,7 @@ import numba
 import numpy as np
 
 from jmodt.detection.evaluation.rotate_iou import rotate_iou_gpu_eval
-
+from jmodt.utils import kitti_utils
 
 @numba.jit
 def get_thresholds(scores: np.ndarray, num_gt, num_sample_pts=41):
@@ -357,35 +357,73 @@ def calculate_iou_partly(gt_annos, dt_annos, metric, num_parts=50):
             dt_boxes = np.concatenate([a["bbox"] for a in dt_annos_part], 0)
             overlap_part = image_box_overlap(gt_boxes, dt_boxes)
         elif metric == 1:
+            # loc = np.concatenate(
+            #     [a["location"][:, [0, 2]] for a in gt_annos_part], 0)
+            # dims = np.concatenate(
+            #     [a["dimensions"][:, [0, 2]] for a in gt_annos_part], 0)
+            # rots = np.concatenate([a["rotation_y"] for a in gt_annos_part], 0)
+            # gt_boxes = np.concatenate(
+            #     [loc, dims, rots[..., np.newaxis]], axis=1)
+            # loc = np.concatenate(
+            #     [a["location"][:, [0, 2]] for a in dt_annos_part], 0)
+            # dims = np.concatenate(
+            #     [a["dimensions"][:, [0, 2]] for a in dt_annos_part], 0)
+            # rots = np.concatenate([a["rotation_y"] for a in dt_annos_part], 0)
+            # dt_boxes = np.concatenate(
+            #     [loc, dims, rots[..., np.newaxis]], axis=1)
+            # overlap_part = bev_box_overlap(gt_boxes, dt_boxes).astype(
+            #     np.float64)
             loc = np.concatenate(
-                [a["location"][:, [0, 2]] for a in gt_annos_part], 0)
+                [a["location"] for a in gt_annos_part], 0)
             dims = np.concatenate(
-                [a["dimensions"][:, [0, 2]] for a in gt_annos_part], 0)
+                [a["dimensions"][:, [1, 2, 0]] for a in gt_annos_part], 0)
             rots = np.concatenate([a["rotation_y"] for a in gt_annos_part], 0)
             gt_boxes = np.concatenate(
                 [loc, dims, rots[..., np.newaxis]], axis=1)
+            gt_corners = kitti_utils.boxes3d_to_corners3d(gt_boxes)
+
             loc = np.concatenate(
-                [a["location"][:, [0, 2]] for a in dt_annos_part], 0)
+                [a["location"] for a in dt_annos_part], 0)
             dims = np.concatenate(
-                [a["dimensions"][:, [0, 2]] for a in dt_annos_part], 0)
+                [a["dimensions"][:, [1, 2, 0]] for a in dt_annos_part], 0)
             rots = np.concatenate([a["rotation_y"] for a in dt_annos_part], 0)
             dt_boxes = np.concatenate(
                 [loc, dims, rots[..., np.newaxis]], axis=1)
-            overlap_part = bev_box_overlap(gt_boxes, dt_boxes).astype(
-                np.float64)
+            dt_corners = kitti_utils.boxes3d_to_corners3d(dt_boxes)
+            bev = kitti_utils.compute_iou(gt_corners, dt_corners, need_iou3d=False)
+            overlap_part = bev.astype(np.float64)
         elif metric == 2:
-            loc = np.concatenate([a["location"] for a in gt_annos_part], 0)
-            dims = np.concatenate([a["dimensions"] for a in gt_annos_part], 0)
+            # loc = np.concatenate([a["location"] for a in gt_annos_part], 0)
+            # dims = np.concatenate([a["dimensions"] for a in gt_annos_part], 0)
+            # rots = np.concatenate([a["rotation_y"] for a in gt_annos_part], 0)
+            # gt_boxes = np.concatenate(
+            #     [loc, dims, rots[..., np.newaxis]], axis=1)
+            # loc = np.concatenate([a["location"] for a in dt_annos_part], 0)
+            # dims = np.concatenate([a["dimensions"] for a in dt_annos_part], 0)
+            # rots = np.concatenate([a["rotation_y"] for a in dt_annos_part], 0)
+            # dt_boxes = np.concatenate(
+            #     [loc, dims, rots[..., np.newaxis]], axis=1)
+            # overlap_part = d3_box_overlap(gt_boxes, dt_boxes).astype(
+            #     np.float64)
+            loc = np.concatenate(
+                [a["location"] for a in gt_annos_part], 0)
+            dims = np.concatenate(
+                [a["dimensions"][:, [1, 2, 0]] for a in gt_annos_part], 0)
             rots = np.concatenate([a["rotation_y"] for a in gt_annos_part], 0)
             gt_boxes = np.concatenate(
                 [loc, dims, rots[..., np.newaxis]], axis=1)
-            loc = np.concatenate([a["location"] for a in dt_annos_part], 0)
-            dims = np.concatenate([a["dimensions"] for a in dt_annos_part], 0)
+            gt_corners = kitti_utils.boxes3d_to_corners3d(gt_boxes)
+
+            loc = np.concatenate(
+                [a["location"] for a in dt_annos_part], 0)
+            dims = np.concatenate(
+                [a["dimensions"][:, [1, 2, 0]] for a in dt_annos_part], 0)
             rots = np.concatenate([a["rotation_y"] for a in dt_annos_part], 0)
             dt_boxes = np.concatenate(
                 [loc, dims, rots[..., np.newaxis]], axis=1)
-            overlap_part = d3_box_overlap(gt_boxes, dt_boxes).astype(
-                np.float64)
+            dt_corners = kitti_utils.boxes3d_to_corners3d(dt_boxes)
+            bev, iou3d = kitti_utils.compute_iou(gt_corners, dt_corners, need_iou3d=True)
+            overlap_part = iou3d.astype(np.float64)
         else:
             raise ValueError("unknown metric")
         parted_overlaps.append(overlap_part)
@@ -441,7 +479,7 @@ def _prepare_data(gt_annos, dt_annos, current_class, difficulty):
 def eval_class(gt_annos,
                dt_annos,
                current_classes,
-               difficultys,
+               difficulties,
                metric,
                min_overlaps,
                compute_aos=False,
@@ -451,7 +489,7 @@ def eval_class(gt_annos,
         gt_annos: dict, must from get_label_annos() in kitti_evaluate.py
         dt_annos: dict, must from get_label_annos() in kitti_evaluate.py
         current_classes: list of int, 0: car, 1: pedestrian, 2: cyclist
-        difficultys: list of int. eval difficulty, 0: easy, 1: normal, 2: hard
+        difficulties: list of int. eval difficulty, 0: easy, 1: normal, 2: hard
         metric: eval type. 0: bbox, 1: bev, 2: 3d
         min_overlaps: float, min overlap. format: [num_overlap, metric, class].
         num_parts: int. a parameter for fast calculate algorithm
@@ -468,14 +506,14 @@ def eval_class(gt_annos,
     N_SAMPLE_PTS = 41
     num_minoverlap = len(min_overlaps)
     num_class = len(current_classes)
-    num_difficulty = len(difficultys)
+    num_difficulty = len(difficulties)
     precision = np.zeros(
         [num_class, num_difficulty, num_minoverlap, N_SAMPLE_PTS])
     recall = np.zeros(
         [num_class, num_difficulty, num_minoverlap, N_SAMPLE_PTS])
     aos = np.zeros([num_class, num_difficulty, num_minoverlap, N_SAMPLE_PTS])
     for m, current_class in enumerate(current_classes):
-        for l, difficulty in enumerate(difficultys):
+        for l, difficulty in enumerate(difficulties):
             rets = _prepare_data(gt_annos, dt_annos, current_class, difficulty)
             (gt_datas_list, dt_datas_list, ignored_gts, ignored_dets,
              dontcares, total_dc_num, total_num_valid_gt) = rets

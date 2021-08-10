@@ -12,11 +12,11 @@ from tools.visualization.kitti_viewer import create_video
 from tools.visualization.line_mesh import LineMesh
 
 parser = argparse.ArgumentParser(description="arg parser")
-parser.add_argument('--data_root', type=str, default='E://sustech-data/2021-07-07/dataset_2hz',
+parser.add_argument('--data_root', type=str, default='E://sustech-data/2021-06-25-06-56-55/dataset',
                     help='the ground truth data root')
-parser.add_argument('--output_dir', type=str, default='E://sustech-data/2021-07-07/dataset_2hz/output/all',
+parser.add_argument('--output_dir', type=str, default='E://sustech-data/2021-06-25-06-56-55/dataset/output/all',
                     help='the screenshot output directory')
-parser.add_argument('--label_dir', type=str, default='D://Github/JMODT/output/trk/2021-07-07/all/',
+parser.add_argument('--label_dir', type=str, default='D://Github/JMODT/output/trk/2021-06-25/all/',
                     help='the label directory')
 parser.add_argument('--viewpoint', type=str, default='viewpoint_all.json',
                     help='the viewpoint json file')
@@ -250,7 +250,7 @@ if __name__ == '__main__':
               output_dir=args.output_dir,
               label_dir=args.label_dir,
               save_screenshot=True)
-    create_video(args.output_dir,
-                 args.video_name,
-                 (1920, 1080),
-                 args.fps)
+    # create_video(args.output_dir,
+    #              args.video_name,
+    #              (1920, 1080),
+    #              args.fps)

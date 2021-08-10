@@ -11,19 +11,23 @@ import tqdm
 from torch.utils.data import DataLoader
 
 from jmodt.config import cfg
-from jmodt.detection.datasets.sustech_dataset import SUSTechDataset, save_sustech_format
+from jmodt.detection.datasets.sustech_dataset import SUSTechDataset, save_sustech_format, convert_sustech_label_to_kitti
+from jmodt.detection.evaluation.evaluate import evaluate as evaluate_detection
 from jmodt.detection.modeling.point_rcnn import PointRCNN
 from jmodt.ops.iou3d import iou3d_utils
 from jmodt.tracking import tracker
-from jmodt.utils import train_utils, kitti_utils, sustech_utils
+from jmodt.utils import train_utils, kitti_utils, sustech_utils, object3d
 from jmodt.utils.bbox_transform import decode_bbox_target
 
 parser = argparse.ArgumentParser(description="arg parser")
-parser.add_argument('--data_root', type=str, default='E://sustech-data/2021-07-07/dataset_2hz',
+parser.add_argument('--data_root', type=str, default='E://sustech-data/2021-06-25-06-56-55/dataset',
                     help='the ground truth data root')
-parser.add_argument('--det_output', type=str, default='output/det/2021-07-07/',
+parser.add_argument('--det_output', type=str, default='output/det/2021-06-25/',
                     help='the detection output directory')
-parser.add_argument('--trk_output', type=str, default='output/trk/2021-07-07/', help='the tracking output directory')
+parser.add_argument('--trk_output', type=str, default='output/trk/2021-06-25/',
+                    help='the tracking output directory')
+parser.add_argument('--kitti_output', type=str, default='output/kitti_det/2021-06-25/',
+                    help='the KITTI format detection output directory')
 parser.add_argument('--ckpt', type=str, default='checkpoints/jmodt.pth', help='the pretrained model path')
 parser.add_argument('--tag', type=str, default='all', help='the tag for tracking results')
 parser.add_argument('--hungarian', action='store_true', help='whether to use hungarian algorithm')
@@ -211,7 +215,7 @@ def joint_detection_and_tracking(logger, detection=True, tracking=True, fps=10):
                 for d in range(len(car_objects)):
                     psr = car_objects[d]['psr']
                     boxes_3d[d, 0] = -psr['position']['x']
-                    boxes_3d[d, 1] = psr['scale']['y'] / 2 - psr['position']['z']
+                    boxes_3d[d, 1] = psr['scale']['z'] / 2 - psr['position']['z']
                     boxes_3d[d, 2] = -psr['position']['y']
                     boxes_3d[d, 3] = psr['scale']['z']
                     boxes_3d[d, 4] = psr['scale']['y']
@@ -271,6 +275,38 @@ def convert_pcd_to_bin(logger):
     logger.info('==> Done')
 
 
+def eval_detection(logger, convert_gt=True):
+    calib_dir = os.path.join(args.data_root, 'calib')
+    label_kitti_dir = os.path.join(args.data_root, 'label_kitti')
+    camera_list = ['rear', 'rear_left', 'rear_right', 'front', 'front_left', 'front_right']
+
+    if convert_gt:
+        label_dir = os.path.join(args.data_root, 'label')
+        logger.info(f'=> Converting gt to {label_kitti_dir}')
+        convert_sustech_label_to_kitti(label_dir, label_kitti_dir, calib_dir, camera_list, score=False)
+
+    txt_output_dir = os.path.join(args.trk_output, 'all')
+    logger.info(f'=> Converting output to {args.kitti_output}')
+    convert_sustech_label_to_kitti(txt_output_dir, args.kitti_output, calib_dir, camera_list, score=True)
+
+    logger.info('=> Evaluating output')
+    for camera in camera_list:
+        logger.info(f'================== {camera} ==================')
+        kitti_txt_input_dir = os.path.join(label_kitti_dir, camera)
+        kitti_txt_output_dir = os.path.join(args.kitti_output, camera)
+        image_idx_list = sorted([f[:-4] for f in os.listdir(kitti_txt_input_dir)])
+
+        ap_result_str, ap_dict = evaluate_detection(kitti_txt_input_dir, kitti_txt_output_dir,
+                                                    image_idx_list=image_idx_list,
+                                                    current_class=0)
+        logger.info(ap_result_str)
+
+
+
+def eval_tracking(logger):
+    pass
+
+
 def main():
     logger = logging.getLogger(__name__)
     logger.setLevel(level=logging.INFO)
@@ -281,10 +317,10 @@ def main():
     ch.setLevel(level=logging.INFO)
     logger.addHandler(ch)
 
-    convert_pcd_to_bin(logger)
-
     # start
-    joint_detection_and_tracking(logger, detection=True, tracking=True, fps=2)
+    # convert_pcd_to_bin(logger)
+    # joint_detection_and_tracking(logger, detection=True, tracking=True, fps=2)
+    eval_detection(logger, convert_gt=True)
 
 
 if __name__ == '__main__':
