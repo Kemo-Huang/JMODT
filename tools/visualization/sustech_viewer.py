@@ -1,3 +1,4 @@
+import argparse
 import json
 import os
 
@@ -7,8 +8,23 @@ from PIL import Image
 from matplotlib import cm
 
 from jmodt.utils.sustech_utils import proj_lidar_to_img
-from line_mesh import LineMesh
-from kitti_viewer import create_video
+from tools.visualization.kitti_viewer import create_video
+from tools.visualization.line_mesh import LineMesh
+
+parser = argparse.ArgumentParser(description="arg parser")
+parser.add_argument('--data_root', type=str, default='E://sustech-data/2021-06-25-06-56-55/dataset',
+                    help='the ground truth data root')
+parser.add_argument('--output_dir', type=str, default='E://sustech-data/2021-06-25-06-56-55/dataset/output/all',
+                    help='the screenshot output directory')
+parser.add_argument('--label_dir', type=str, default='D://Github/JMODT/output/trk/2021-06-25/all/',
+                    help='the label directory')
+parser.add_argument('--viewpoint', type=str, default='viewpoint_all.json',
+                    help='the viewpoint json file')
+parser.add_argument('--video_name', type=str, default='2021-07-07.avi',
+                    help='the video name')
+parser.add_argument('--fps', type=int, default=2,
+                    help='the video frame rate')
+args = parser.parse_args()
 
 
 def get_lidar(file_path):
@@ -69,7 +85,7 @@ def get_pc_in_range(pc, xy_dist=70, z_range=(-3, 1)):
     return pc
 
 
-def visualize(root_dir, viewpoint_file, output_dir, label_dir, save_screenshot=False):
+def visualize(root_dir, viewpoint_file, output_dir, label_dir, save_screenshot=False, trajectory_length=20):
     frames = sorted([f[:-4] for f in os.listdir(os.path.join(root_dir, 'lidar_bin'))])
 
     vis = open3d.visualization.Visualizer()
@@ -156,7 +172,6 @@ def visualize(root_dir, viewpoint_file, output_dir, label_dir, save_screenshot=F
                          [1, 4], [6, 7]  # front
                          ]
             label_path = os.path.join(label_dir, f'{frame}.json')
-
             if not os.path.exists(label_path):
                 data = []
             else:
@@ -165,6 +180,8 @@ def visualize(root_dir, viewpoint_file, output_dir, label_dir, save_screenshot=F
                         data = json.load(f)
                     except json.decoder.JSONDecodeError:
                         data = []
+
+            track_dict = {}  # id, center
             for label in data:
                 psr = label['psr']
                 center = np.array(
@@ -176,10 +193,44 @@ def visualize(root_dir, viewpoint_file, output_dir, label_dir, save_screenshot=F
                 extent = np.array([float(psr['scale']['x']), float(psr['scale']['y']), float(psr['scale']['z'])])
                 box = open3d.geometry.OrientedBoundingBox(center, R, extent)
                 points = box.get_box_points()
-                color = color_map(color_indices[int(label['obj_id'])])[:3]
+                tracking_id = int(label['obj_id'])
+                track_dict[tracking_id] = [center]
+                color = color_map(color_indices[tracking_id])[:3]
                 line_mesh1 = LineMesh(points, box_lines, color, 0.1)
                 box = line_mesh1.cylinder_segments
                 for line in box:
+                    vis.add_geometry(line)
+
+            # get box centers from previous frames
+            min_frame = max(0, int(10 * float(frame)) - trajectory_length)
+            for cur_frame in range(int(10 * float(frame)) - 1, min_frame - 1, -1):
+                cur_frame = "{:.1f}".format(cur_frame / 10)
+                label_path = os.path.join(label_dir, f'{cur_frame}.json')
+                if not os.path.exists(label_path):
+                    data = []
+                else:
+                    with open(label_path, 'r') as f:
+                        try:
+                            data = json.load(f)
+                        except json.decoder.JSONDecodeError:
+                            data = []
+                for label in data:
+                    tracking_id = int(label['obj_id'])
+                    if tracking_id in track_dict:
+                        psr = label['psr']
+                        center = np.array(
+                            [float(psr['position']['x']), float(psr['position']['y']), float(psr['position']['z'])])
+                        track_dict[tracking_id].append(center)
+
+            for tracking_id, centers in track_dict.items():
+                if len(centers) < 2:
+                    continue
+                centers = np.vstack(centers)
+                lines = [[q, q + 1] for q in range(len(centers) - 1)]
+                color = color_map(color_indices[tracking_id])[:3]
+                line_mesh1 = LineMesh(centers, lines, color, 0.1)
+                trajectory = line_mesh1.cylinder_segments
+                for line in trajectory:
                     vis.add_geometry(line)
 
             vis.get_view_control().convert_from_pinhole_camera_parameters(viewpoint_param)
@@ -193,13 +244,13 @@ def visualize(root_dir, viewpoint_file, output_dir, label_dir, save_screenshot=F
 
 
 if __name__ == '__main__':
-    visualize(root_dir='/media/kemo/Kemo/sustech-data/2021-06-25-06-56-55/dataset_10hz/',
-              viewpoint_file='viewpoint_all.json',
-              output_dir=f'/media/kemo/Kemo/sustech-data/2021-06-25-06-56-55/dataset_10hz/output/all',
-              label_dir='/home/kemo/Github/JMODT/output/trk/2021-06-25/all/',
-              # label_dir = '/media/kemo/Kemo/sustech-data/2021-06-25-06-56-55/dataset/label'
+    np.random.seed(2333)
+    visualize(root_dir=args.data_root,
+              viewpoint_file=args.viewpoint,
+              output_dir=args.output_dir,
+              label_dir=args.label_dir,
               save_screenshot=True)
-    create_video(f'/media/kemo/Kemo/sustech-data/2021-06-25-06-56-55/dataset_10hz/output/all',
-                 '2021-06-25_10hz.avi',
-                 (1920, 1080),
-                 10)
+    # create_video(args.output_dir,
+    #              args.video_name,
+    #              (1920, 1080),
+    #              args.fps)

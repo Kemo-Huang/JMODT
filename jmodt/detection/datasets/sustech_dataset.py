@@ -2,10 +2,11 @@ import json
 import os
 
 import numpy as np
+import tqdm
 from PIL import Image
 from torch.utils.data import Dataset
 
-from jmodt.utils.sustech_utils import proj_lidar_to_img, psr_to_corners
+from jmodt.utils import sustech_utils
 
 
 class SUSTechDataset(Dataset):
@@ -105,7 +106,7 @@ class SUSTechDataset(Dataset):
         extrinsic, intrinsic = self.get_calib()
 
         pts_xyz = self.get_pc_in_range(pts_xyz)
-        pts_xy, valid_mask = proj_lidar_to_img(pts_xyz, extrinsic, intrinsic, img_shape)
+        pts_xy, valid_mask = sustech_utils.proj_lidar_to_img(pts_xyz, extrinsic, intrinsic, img_shape)
         pts_xyz = pts_xyz[valid_mask]
 
         choice = self.sample_points(pts_xyz)
@@ -165,7 +166,7 @@ def save_sustech_format(sample_id, bbox3d, score, txt_output_dir,
             'position': {
                 'x': -bbox3d[k, 0],
                 'y': -bbox3d[k, 2],
-                'z': -bbox3d[k, 1] + bbox3d[k, 4] / 2
+                'z': -bbox3d[k, 1] + bbox3d[k, 3] / 2
             },
             'scale': {
                 'x': bbox3d[k, 5],  # l
@@ -175,7 +176,7 @@ def save_sustech_format(sample_id, bbox3d, score, txt_output_dir,
             'rotation': {
                 'x': 0,
                 'y': 0,
-                'z': np.pi - bbox3d[k, 6]
+                'z': np.pi - bbox3d[k, 6] if bbox3d[k, 6] > 0 else -np.pi - bbox3d[k, 6]
             }
         },
         'obj_type': 'Car',
@@ -186,3 +187,63 @@ def save_sustech_format(sample_id, bbox3d, score, txt_output_dir,
     if feat is not None:
         output_file = os.path.join(feat_output_dir, f'{sample_id}.npy')
         np.save(output_file, feat.astype(np.float32))
+
+
+def convert_sustech_label_to_kitti(input_dir, output_dir, calib_dir, camera_list, fps=2, img_shape=(1536, 2048),
+                                   score=False):
+    """
+    Convert 3D objects to each camera-view for KITTI format based evaluation
+    """
+    camera_calib = {}
+    for camera in camera_list:
+        camera_output_dir = os.path.join(output_dir, camera)
+        os.makedirs(camera_output_dir, exist_ok=True)
+        file_path = os.path.join(calib_dir, 'camera', f'{camera}.json')
+        with open(file_path, 'r') as calib_f:
+            calib = json.load(calib_f)
+        extrinsic = np.array(calib['extrinsic'], dtype=np.float32).reshape(4, 4)[:3, :]
+        intrinsic = np.array(calib['intrinsic'], dtype=np.float32).reshape(3, 3)
+        camera_calib[camera] = (extrinsic, intrinsic)
+
+    label_files = os.listdir(input_dir)
+    for label_file in tqdm.tqdm(label_files):
+        frame = float(label_file[:-5]) * fps
+        if int(frame) != frame:
+            continue
+        with open(os.path.join(input_dir, label_file), 'r') as f:
+            labels = json.load(f)
+
+        for camera in camera_list:
+            extrinsic, intrinsic = camera_calib[camera]
+
+            corners = np.array([sustech_utils.psr_to_corners(label['psr']) for label in labels]).reshape((-1, 8, 3))
+
+            img_boxes, valid_mask, trunc = sustech_utils.proj_box_to_img(corners, extrinsic, intrinsic, img_shape)
+
+            bbox3d = np.array([sustech_utils.psr_to_kitti_box(label['psr']) for label in labels]).reshape(-1, 7)
+            bbox3d = bbox3d[valid_mask]
+
+            alpha = np.array([sustech_utils.psr_to_kitti_alpha(label['psr']) for label in labels])
+            alpha = alpha[valid_mask]
+
+            assert len(img_boxes) == len(trunc) == len(alpha) == len(bbox3d)
+            # save
+            output_file = os.path.join(output_dir, camera, f'{int(frame)}.txt')
+
+            if not score:
+                with open(output_file, 'w') as f:
+                    f.writelines([
+                        'Car %.2f 0 %.4f %.4f %.4f %.4f %.4f %.4f %.4f %.4f %.4f %.4f %.4f %.4f\n' %
+                        (trunc[k], alpha[k], img_boxes[k, 0], img_boxes[k, 1], img_boxes[k, 2], img_boxes[k, 3],
+                         bbox3d[k, 3], bbox3d[k, 4], bbox3d[k, 5], bbox3d[k, 0], bbox3d[k, 1], bbox3d[k, 2],
+                         bbox3d[k, 6]) for k in range(len(bbox3d))
+                    ])
+            else:
+                scores = np.array([label['score'] for label in labels])[valid_mask]
+                with open(output_file, 'w') as f:
+                    f.writelines([
+                        'Car %.2f 0 %.4f %.4f %.4f %.4f %.4f %.4f %.4f %.4f %.4f %.4f %.4f %.4f %.4f\n' %
+                        (trunc[k], alpha[k], img_boxes[k, 0], img_boxes[k, 1], img_boxes[k, 2], img_boxes[k, 3],
+                         bbox3d[k, 3], bbox3d[k, 4], bbox3d[k, 5], bbox3d[k, 0], bbox3d[k, 1], bbox3d[k, 2],
+                         bbox3d[k, 6], scores[k]) for k in range(len(bbox3d))
+                    ])
