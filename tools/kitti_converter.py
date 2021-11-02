@@ -51,7 +51,7 @@ def create_train_sample_data(input_root, output_root, init_or_clear_dirs=False, 
         lidar_files = os.listdir(tracking_lidar)
         frames = [f.split('.')[0] for f in lidar_files]
         frames.sort()
-        print(seq, len(frames))
+        print('processing sequence', seq, ', length:', len(frames))
 
         label_dict = {}
         for frame in frames:
