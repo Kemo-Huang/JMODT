@@ -32,7 +32,7 @@ def create_train_sample_data(input_root, output_root, init_or_clear_dirs=False, 
         init_or_clear_dir(res_label)
         init_or_clear_dir(res_lidar)
 
-    tracking_root = os.path.join(input_root, 'tracking')
+    in_training = os.path.join(input_root, 'training')
 
     sample_id = 0
     used_tid = 0  # start from tid = 1
@@ -43,10 +43,10 @@ def create_train_sample_data(input_root, output_root, init_or_clear_dirs=False, 
 
     for seq in range(21):
         seq = '%04d' % seq
-        tracking_image = os.path.join(tracking_root, 'training', 'image_02', seq)
-        tracking_lidar = os.path.join(tracking_root, 'training', 'velodyne', seq)
-        tracking_calib = os.path.join(tracking_root, 'training', 'calib', f'{seq}.txt')
-        tracking_label = os.path.join(tracking_root, 'training', 'label_02', f'{seq}.txt')
+        tracking_image = os.path.join(in_training, 'image_02', seq)
+        tracking_lidar = os.path.join(in_training, 'velodyne', seq)
+        tracking_calib = os.path.join(in_training, 'calib', f'{seq}.txt')
+        tracking_label = os.path.join(in_training, 'label_02', f'{seq}.txt')
         # get number of frames
         lidar_files = os.listdir(tracking_lidar)
         frames = [f.split('.')[0] for f in lidar_files]
