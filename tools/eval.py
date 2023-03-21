@@ -10,14 +10,14 @@ import torch
 import tqdm
 from torch.utils.data import DataLoader
 
-from jmodt.config import cfg, VALID_SEQ_ID
+from jmodt.config import VALID_SEQ_ID, cfg
 from jmodt.detection.datasets.kitti_dataset import KittiDataset
 from jmodt.detection.evaluation.evaluate import evaluate as evaluate_detection
 from jmodt.detection.modeling.point_rcnn import PointRCNN
 from jmodt.ops.iou3d import iou3d_utils
 from jmodt.tracking import tracker
 from jmodt.tracking.kitti_evaluate import evaluate as evaluate_tracking
-from jmodt.utils import train_utils, kitti_utils
+from jmodt.utils import kitti_utils, train_utils
 from jmodt.utils.bbox_transform import decode_bbox_target
 from jmodt.utils.object3d import Object3d
 
@@ -297,7 +297,7 @@ def eval_tracking(logger):
     os.makedirs(tracking_res_dir, exist_ok=True)
     det_res_dir = args.det_output
 
-    # MOT hyper-parameters
+    # MOT hyper-parameters for MIP
     t_miss = 2
     t_hit = 0
     w_cls = 100
@@ -305,7 +305,19 @@ def eval_tracking(logger):
     w_iou = 10
     w_dis = 10
     w_se = 1
-    cls_threshold = 0.85
+    cls_thresh = 0.85
+
+    # MOT hyper-parameters for HA
+    if args.hungarian:
+        t_miss = 2
+        t_hit = 0
+        w_app = 2
+        w_iou = 10
+        w_dis = 10
+        cls_thresh = 0.85
+        score_thresh = 0
+        match_thresh = 0
+
 
     logger.info("**********************Start evaluate tracking**********************")
     logger.info(f't_miss={t_miss}, t_hit={t_hit}, '
@@ -323,7 +335,9 @@ def eval_tracking(logger):
         se_model=model.rcnn_net.se_layer,
         t_miss=t_miss, t_hit=t_hit,
         w_cls=w_cls, w_app=w_app, w_iou=w_iou, w_dis=w_dis, w_se=w_se,
-        hungarian=args.hungarian)
+        hungarian=args.hungarian,
+        score_thresh=score_thresh,
+        match_thresh=match_thresh)
 
     total_time = 0
     total_frames = 0
@@ -360,7 +374,7 @@ def eval_tracking(logger):
                     boxes_3d[d, 6] = car_objects[d].ry
                 scores = np.array([obj.score for obj in car_objects], dtype=np.float32)
 
-                mask = scores > cls_threshold
+                mask = scores > cls_thresh
 
                 boxes_3d = boxes_3d[mask]
                 scores = scores[mask]

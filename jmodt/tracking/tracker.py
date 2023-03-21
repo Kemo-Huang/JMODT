@@ -1,13 +1,14 @@
 import numpy as np
 import torch
 
-from jmodt.tracking.data_association import ortools_solve, hungarian_match
+from jmodt.tracking.data_association import hungarian_match, ortools_solve
 from jmodt.tracking.track import Track
 
 
 class Tracker:
     def __init__(self, link_model, se_model, t_miss, t_hit,
-                 w_cls, w_app, w_iou, w_dis, w_se, hungarian=False):
+                 w_cls, w_app, w_iou, w_dis, w_se, hungarian=False,
+                 score_thresh=0, match_thresh=0):
         self.link_model = link_model
         self.se_model = se_model
         self.t_miss = t_miss
@@ -18,6 +19,8 @@ class Tracker:
         self.w_dis = w_dis
         self.w_se = w_se
         self.hungarian = hungarian
+        self.score_thresh = score_thresh
+        self.match_thresh = match_thresh
 
         self.tracks = []
         self.frame_count = 0
@@ -93,7 +96,9 @@ class Tracker:
                 link_scores,
                 w_app=self.w_app,
                 w_iou=self.w_iou,
-                score_threshold=0
+                w_dis=self.w_dis,
+                score_threshold=self.score_thresh,
+                match_threshold=self.match_thresh
             )
         else:
             cls_scores = self.w_cls * (np.concatenate([pred_scores, det_scores]) - 1)

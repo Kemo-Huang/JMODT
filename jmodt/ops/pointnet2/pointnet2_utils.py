@@ -2,17 +2,16 @@ from typing import Tuple
 
 import torch
 import torch.nn as nn
-from torch.autograd import Function
-from torch.autograd import Variable
+from torch.autograd import Function, Variable
 
 from jmodt.ops.pointnet2 import pointnet2_cuda
 
 
-class FurthestPointSampling(Function):
+class farthestPointSampling(Function):
     @staticmethod
     def forward(ctx, xyz: torch.Tensor, npoint: int) -> torch.Tensor:
         """
-        Uses iterative furthest point sampling to select a set of npoint features that have the largest
+        Uses iterative farthest point sampling to select a set of npoint features that have the largest
         minimum distance
         :param ctx:
         :param xyz: (B, N, 3) where N > npoint
@@ -26,7 +25,7 @@ class FurthestPointSampling(Function):
         output = torch.cuda.IntTensor(B, npoint)
         temp = torch.cuda.FloatTensor(B, N).fill_(1e10)
 
-        pointnet2_cuda.furthest_point_sampling_wrapper(B, N, npoint, xyz, temp, output)
+        pointnet2_cuda.farthest_point_sampling_wrapper(B, N, npoint, xyz, temp, output)
         return output
 
     @staticmethod
@@ -34,7 +33,7 @@ class FurthestPointSampling(Function):
         return None, None
 
 
-furthest_point_sample = FurthestPointSampling.apply
+farthest_point_sample = farthestPointSampling.apply
 
 
 class GatherOperation(Function):

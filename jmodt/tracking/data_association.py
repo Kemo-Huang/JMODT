@@ -110,12 +110,19 @@ def hungarian_match(det_boxes,
                     link_scores,
                     w_app,
                     w_iou,
-                    score_threshold=0):
+                    w_dis,
+                    score_threshold=0,
+                    match_threshold=0
+    ):
     iou_matrix = boxes_iou3d_gpu(pred_boxes, det_boxes)
-    link_matrix = link_scores * w_app + iou_matrix * w_iou
+    dis_matrix = boxes_dist_gpu(pred_boxes, det_boxes)
+    link_matrix = link_scores * w_app + iou_matrix * w_iou + dis_matrix * w_dis
     link_matrix = link_matrix.cpu().numpy()
 
-    row_ind, col_ind = linear_sum_assignment(-link_matrix)
+    row_ind, col_ind = linear_sum_assignment(link_matrix, maximize=True)
+    valid_mask = link_matrix[row_ind, col_ind] > match_threshold
+    row_ind = row_ind[valid_mask]
+    col_ind = col_ind[valid_mask]
 
     unmatched_detections = []
     tentative_detections = []

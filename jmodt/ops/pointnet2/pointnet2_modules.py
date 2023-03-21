@@ -32,7 +32,7 @@ class _PointnetSAModuleBase(nn.Module):
 
         if new_xyz is None:
             if self.npoint is not None:
-                idx = pointnet2_utils.furthest_point_sample(xyz, self.npoint)
+                idx = pointnet2_utils.farthest_point_sample(xyz, self.npoint)
                 new_xyz = pointnet2_utils.gather_operation(
                     xyz_flipped,
                     idx
